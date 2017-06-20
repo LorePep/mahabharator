@@ -18,6 +18,7 @@ mail: l.peppoloni@gmail.com
 
 from keras.models import Sequential
 from keras.layers import Dense, Activation, LSTM, Dropout
+from keras.callbacks import ModelCheckpoint
 from keras.optimizers import RMSprop
 import numpy as np
 import random
@@ -49,7 +50,7 @@ parser.add_argument('-i', '--input', type=str,
 parser.add_argument('-l', '--layers', help="List of hidden layers for the net", nargs='+', type=int)
 parser.add_argument('-s', '--sequence', help="Length of the sequence", type=int, default=25)
 parser.add_argument('--learningrate', help="Learning rate for the net", type=float, default=0.01)
-parser.add_argument('--dropout', help="Dropout between layers for the net", type=float, default=0.3)
+parser.add_argument('--dropout', help="Dropout between layers for the net", type=float, default=0.2)
 parser.add_argument('--it', help="Training iteration", type=int, default=300)
 parser.add_argument('-b', '--batch', help="Training batch size", type=int, default=256)
 
@@ -61,11 +62,11 @@ print colored("Loading txt file %s" % args.infile, "cyan")
 
 data = open(args.infile, 'r').read()
 
+data = data[:500000]
+
 chars = list(set(data))
 
-data_size, vocab_size = len(data), len(chars)
-
-print 'Loaded book has %d characters and %d unique characters' % (data_size, vocab_size)
+print 'Loaded book has %d characters and %d unique characters' % (len(data), len(chars))
 
 # Every character is coded with a unique integer
 # The dict will be used to create the hot encoding vector later
@@ -107,10 +108,17 @@ print colored("Building the model: \n\t Number of layers %d" % len(args.layers),
 model = Sequential()
 for i, lay in enumerate(args.layers):
     if i == 0:
-        model.add(LSTM(lay, input_shape=(args.sequence, len(chars)), return_sequences=True))
-    else:
+        if i == len(args.layers) - 1:
+            model.add(LSTM(lay, input_shape=(args.sequence, len(chars))))
+        else:
+            model.add(LSTM(lay, input_shape=(args.sequence, len(chars)), return_sequences=True))
         model.add(Dropout(args.dropout))
-        model.add(LSTM(lay, return_sequences=True))
+    else:
+        if i == len(args.layers) - 1:
+            model.add(LSTM(lay))
+        else:
+            model.add(LSTM(lay, return_sequences=True))
+        model.add(Dropout(args.dropout))
 
 model.add(Dense(len(chars)))
 model.add(Activation('softmax'))
@@ -120,40 +128,44 @@ model.compile(loss='categorical_crossentropy', optimizer=optimizer)
 
 
 for iteration in range(1, args.it):
-    print()
-    print('-' * 50)
-    print('Iteration', iteration)
+
+    filepath = "weights-improvement-{epoch:02d}-{loss:.4f}.hdf5"
+
+    # Model checkpoints for weights
+    checkpoint = ModelCheckpoint(filepath, monitor='loss', verbose=1, save_best_only=True, mode='min')
+    callbacks_list = [checkpoint]
+
     model.fit(X, Y,
-              batch_size=args.batchsize,
-              epochs=1)
+              batch_size=args.batch,
+              epochs=1, callbacks=callbacks_list)
 
-    start_index = random.randint(0, len(data) - args.sequence - 1)
-
-    for diversity in [0.2, 0.5, 1.0, 1.2]:
-        print()
-        print('----- diversity:', diversity)
-
-        generated = ''
-        sentence = text[start_index: start_index + maxlen]
-        generated += sentence
-        print('----- Generating with seed: "' + sentence + '"')
-        sys.stdout.write(generated)
-
-        for i in range(400):
-            x = np.zeros((1, maxlen, len(chars)))
-            for t, char in enumerate(sentence):
-                x[0, t, char_indices[char]] = 1.
-
-            preds = model.predict(x, verbose=0)[0]
-            next_index = sample(preds, diversity)
-            next_char = indices_char[next_index]
-
-            generated += next_char
-            sentence = sentence[1:] + next_char
-
-            sys.stdout.write(next_char)
-            sys.stdout.flush()
-        print()
+    # start_index = random.randint(0, len(data) - args.sequence - 1)
+    #
+    # for diversity in [0.2, 0.5, 1.0, 1.2]:
+    #     print()
+    #     print('----- diversity:', diversity)
+    #
+    #     generated = ''
+    #     sentence = data[start_index: start_index + args.sequence]
+    #     generated += sentence
+    #     print('----- Generating with seed: "' + sentence + '"')
+    #     sys.stdout.write(generated)
+    #
+    #     for i in range(400):
+    #         x = np.zeros((1, args.sequence, len(chars)))
+    #         for t, char in enumerate(sentence):
+    #             x[0, t, char_to_ix[char]] = 1.
+    #
+    #         preds = model.predict(x, verbose=0)[0]
+    #         next_index = sample_output(preds, diversity)
+    #         next_char = ix_to_char[next_index]
+    #
+    #         generated += next_char
+    #         sentence = sentence[1:] + next_char
+    #
+    #         sys.stdout.write(next_char)
+    #         sys.stdout.flush()
+    #     print()
 
 
 
