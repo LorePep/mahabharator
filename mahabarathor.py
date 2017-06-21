@@ -26,23 +26,6 @@ import sys
 from termcolor import colored
 import argparse
 
-
-def sample_output(preds, temperature=1.0):
-    """
-    Function to sample an index from a probability distribution
-    :param preds: The probability distribution
-    :param temperature: The temperature for the sampling
-    :return: return the sampled index
-    """
-
-    preds = np.asarray(preds).astype('float64')
-    preds = np.log(preds) / temperature
-    exp_preds = np.exp(preds)
-    preds = exp_preds / np.sum(exp_preds)
-    probas = np.random.multinomial(1, preds, 1)
-    return np.argmax(probas)
-
-
 parser = argparse.ArgumentParser(
     description='Train RNN to generate new chapters of the Mahabaratha')
 parser.add_argument('-i', '--input', type=str,
@@ -53,7 +36,8 @@ parser.add_argument('--learningrate', help="Learning rate for the net", type=flo
 parser.add_argument('--dropout', help="Dropout between layers for the net", type=float, default=0.2)
 parser.add_argument('--it', help="Training iteration", type=int, default=300)
 parser.add_argument('-b', '--batch', help="Training batch size", type=int, default=256)
-
+parser.add_argument('-w', '--weight', type=str,
+                    help="Path to the weight file", default="", dest="weights")
 
 args = parser.parse_args()
 
@@ -62,7 +46,7 @@ print colored("Loading txt file %s" % args.infile, "cyan")
 
 data = open(args.infile, 'r').read()
 
-data = data[:500000]
+data = data[:700000]
 
 chars = list(set(data))
 
@@ -105,6 +89,7 @@ for i, chunk in enumerate(chunks):
 
 # Build the model
 print colored("Building the model: \n\t Number of layers %d" % len(args.layers), "cyan")
+
 model = Sequential()
 for i, lay in enumerate(args.layers):
     if i == 0:
@@ -124,6 +109,11 @@ model.add(Dense(len(chars)))
 model.add(Activation('softmax'))
 
 optimizer = RMSprop(lr=args.learningrate)
+
+if args.weights != '':
+    print colored("Loading weights from file %s" % args.weights, "red")
+    model.load_weights(args.weights)
+
 model.compile(loss='categorical_crossentropy', optimizer=optimizer)
 
 
@@ -138,36 +128,3 @@ for iteration in range(1, args.it):
     model.fit(X, Y,
               batch_size=args.batch,
               epochs=1, callbacks=callbacks_list)
-
-    # start_index = random.randint(0, len(data) - args.sequence - 1)
-    #
-    # for diversity in [0.2, 0.5, 1.0, 1.2]:
-    #     print()
-    #     print('----- diversity:', diversity)
-    #
-    #     generated = ''
-    #     sentence = data[start_index: start_index + args.sequence]
-    #     generated += sentence
-    #     print('----- Generating with seed: "' + sentence + '"')
-    #     sys.stdout.write(generated)
-    #
-    #     for i in range(400):
-    #         x = np.zeros((1, args.sequence, len(chars)))
-    #         for t, char in enumerate(sentence):
-    #             x[0, t, char_to_ix[char]] = 1.
-    #
-    #         preds = model.predict(x, verbose=0)[0]
-    #         next_index = sample_output(preds, diversity)
-    #         next_char = ix_to_char[next_index]
-    #
-    #         generated += next_char
-    #         sentence = sentence[1:] + next_char
-    #
-    #         sys.stdout.write(next_char)
-    #         sys.stdout.flush()
-    #     print()
-
-
-
-
-
